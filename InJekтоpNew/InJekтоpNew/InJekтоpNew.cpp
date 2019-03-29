@@ -1,10 +1,12 @@
-﻿// InJekтоpNew.cpp : Определяет точку входа для приложения.
+// InJekтоpNew.cpp : Определяет точку входа для приложения.
 //
 
 #include "stdafx.h"
 #include "InJekтоpNew.h"
 
 #define MAX_LOADSTRING 100
+#define ErrorMessageBox(msg) MessageBoxA(NULL, msg, "InJekтоp - Упс, проблемс", MB_OK | MB_TOPMOST | MB_ICONERROR);
+#define CustomMessageBox(title, msg) MessageBoxA(NULL, msg, "InJekтоp - " title, MB_OK | MB_TOPMOST);
 
 using namespace std;
 
@@ -41,6 +43,7 @@ void				select_process(HWND hWnd);
 bool				Inject(const DWORD * pId, const char * dllName);
 void				select_process(HWND hWnd);
 DWORD				GetProcID(char * name);
+BOOL				CheckForDLL(DWORD *processid, char *pathofDLL);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -99,7 +102,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.cbClsExtra = 0;
 	wcex.cbWndExtra = 0;
 	wcex.hInstance = hInstance;
-	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_INJEKPNEW));
+	wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCEW(IDI_INJEKPNEW));
 	wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
 	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 0);
 	wcex.lpszMenuName = MAKEINTRESOURCEW(IDI_INJEKPNEW);
@@ -209,18 +212,24 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			DWORD pID = GetProcID(processid);
 			if (!pID)
 			{
-				MessageBoxA(hWnd, "Process is not finded", "Error", MB_OK | MB_ICONERROR);
-				return DefWindowProc(hWnd, message, wParam, lParam);
+				ErrorMessageBox("Process is not finded");
+				return DefWindowProcW(hWnd, message, wParam, lParam);
 			}
 			GetWindowTextA(hWndDLLName, dllpath, MAX_PATH);
 
+			if (CheckForDLL(&pID, dllpath))
+			{
+				ErrorMessageBox("DLL already in process");
+				return DefWindowProc(hWnd, message, wParam, lParam);
+			}
+
 			if (!Inject(&pID, (const char *)dllpath))
 			{
-				MessageBoxW(hWnd, L"Failed to inject", L"Status", MB_OK | MB_ICONERROR);
+				ErrorMessageBox("Failed to inject");
 			}
 			else
 			{
-				MessageBoxW(hWnd, L"Successful inject", L"Status", MB_OK | MB_ICONASTERISK);
+				CustomMessageBox("Status", "Successful inject");
 			}
 		}
 		break;
@@ -287,7 +296,7 @@ void RegisterDialogClass(HWND hWnd)
 
 	hWndProcessName = CreateWindowA("EDIT", "",
 		WS_VISIBLE | WS_BORDER | WS_CHILD | ES_CENTER | ES_AUTOHSCROLL,
-		10, 25, 360, 17, hWnd, (HMENU)IDC_SELECT_PROCESS_TEXT, NULL, NULL);
+		10, 25, 360, 20, hWnd, (HMENU)IDC_SELECT_PROCESS_TEXT, NULL, NULL);
 
 	hWndProcessList = CreateWindowA("BUTTON", "Processes",
 		WS_VISIBLE | WS_CHILD,
@@ -299,7 +308,7 @@ void RegisterDialogClass(HWND hWnd)
 
 	hWndDLLName = CreateWindowA("EDIT", "",
 		WS_VISIBLE | WS_BORDER | WS_CHILD | ES_CENTER | ES_AUTOHSCROLL,
-		10, 75, 360, 17, hWnd, (HMENU)IDC_SELECT_DLL_TEXT, NULL, NULL);
+		10, 75, 360, 20, hWnd, (HMENU)IDC_SELECT_DLL_TEXT, NULL, NULL);
 
 	hWndSelectDLLButton = CreateWindowA("BUTTON", "Choose",
 		WS_VISIBLE | WS_CHILD,
@@ -308,39 +317,6 @@ void RegisterDialogClass(HWND hWnd)
 	CreateWindowA("BUTTON", "Inject",
 		WS_VISIBLE | WS_CHILD,
 		5, 100, 475, 25, hWnd, (HMENU)IDC_INJECTINER_BUTTON, NULL, NULL);
-}
-
-void PrintProcessNameAndID(DWORD processID)
-{
-	TCHAR szProcessName[MAX_PATH] = TEXT("<unknown>");
-
-	// Get a handle to the process.
-
-	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
-		PROCESS_VM_READ,
-		FALSE, processID);
-
-	// Get the process name.
-
-	if (NULL != hProcess)
-	{
-		HMODULE hMod;
-		DWORD cbNeeded;
-
-		if (EnumProcessModules(hProcess, &hMod, sizeof(hMod),
-			&cbNeeded))
-		{
-			GetModuleBaseName(hProcess, hMod, szProcessName,
-				sizeof(szProcessName) / sizeof(TCHAR));
-			SetConsoleTextAttribute(handle, FOREGROUND_GREEN | FOREGROUND_BLUE);
-			_tprintf(TEXT("%s\n"), szProcessName);
-			SetConsoleTextAttribute(handle, FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE);
-		}
-	}
-
-	// Release the handle to the process.
-
-	CloseHandle(hProcess);
 }
 
 void select_process(HWND hWnd)
@@ -355,25 +331,39 @@ void select_process(HWND hWnd)
 	cout.clear();
 	handle = GetStdHandle(STD_OUTPUT_HANDLE);
 	setlocale(LC_ALL, "Russian");
-	if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
+
+	HANDLE hProcessSnap;
+	PROCESSENTRY32 pe32;
+
+	// Take a snapshot of all processes in the system.
+	hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (hProcessSnap == INVALID_HANDLE_VALUE)
 	{
+		cout << "CreateToolhelp32Snapshot (of processes)";
+		FreeConsole();
 		return;
 	}
 
+	// Set the size of the structure before using it.
+	pe32.dwSize = sizeof(PROCESSENTRY32);
 
-	// Calculate how many process identifiers were returned.
-
-	cProcesses = cbNeeded / sizeof(DWORD);
-
-	// Print the name and process identifier for each process.
-
-	for ( unsigned int i = 0; i < cProcesses; i++)
+	// Retrieve information about the first process,
+	// and exit if unsuccessful
+	if (!Process32First(hProcessSnap, &pe32))
 	{
-		if (aProcesses[i] != 0)
-		{
-			PrintProcessNameAndID(aProcesses[i]);
-		}
+		cout << "Process32First"; // show cause of failure
+		CloseHandle(hProcessSnap);          // clean the snapshot object
+		FreeConsole();
+		return;
 	}
+
+	do
+	{
+		_tprintf(L"\n%s", pe32.szExeFile);
+
+	} while (Process32Next(hProcessSnap, &pe32));
+
+	CloseHandle(hProcessSnap);
 	FreeConsole();
 }
 
@@ -382,7 +372,7 @@ void select_dll(HWND hWnd)
 
 	ZeroMemory(&ofn, sizeof(ofn));
 	ofn.lStructSize = sizeof(ofn);
-	ofn.hwndOwner = NULL;
+	ofn.hwndOwner = hWnd;
 	ofn.lpstrFile = (LPWSTR)szFile;
 	ofn.lpstrFile[0] = '\0';
 	ofn.nMaxFile = sizeof(szFile);
@@ -392,7 +382,7 @@ void select_dll(HWND hWnd)
 	ofn.nMaxFileTitle = 0;
 	ofn.lpstrInitialDir = NULL;
 	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
-	GetOpenFileName(&ofn);
+	GetOpenFileNameW(&ofn);
 
 	if (ofn.lpstrFile)
 	{
@@ -400,7 +390,7 @@ void select_dll(HWND hWnd)
 	}
 	else
 	{
-		MessageBoxA(hWnd, "DLL isn't choosen", "Error", MB_OK);
+		ErrorMessageBox("DLL isn't choosen");
 	}
 }
 
@@ -414,64 +404,134 @@ bool Inject(const DWORD *pId, const char * dllName)
 	if (h)
 	{
 		LPVOID LoadLibAddr = (LPVOID)GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA");
+		if (LoadLibAddr == NULL)
+		{
+			ErrorMessageBox("[!] failed to create remote process");
+			CHAR Error[MAX_PATH]; // MAX_PATH is used for system paths, it's still big enough
+			wsprintfA(Error, "Error: %lu", GetLastError());
+			ErrorMessageBox(Error);
+			CloseHandle(h);
+			return FALSE;
+		}
 		LPVOID dereercomp = VirtualAllocEx(h, NULL, strlen(dllName), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-		WriteProcessMemory(h, dereercomp, dllName, strlen(dllName), NULL);
+		if (dereercomp == NULL)
+		{
+			ErrorMessageBox("[!] allocation of memory failed");
+			CHAR Error[MAX_PATH]; // MAX_PATH is used for system paths, it's still big enough
+			wsprintfA(Error, "Error: %lu", GetLastError());
+			ErrorMessageBox(Error);
+			CloseHandle(h);
+			return FALSE;
+		}
+		auto bStatus = WriteProcessMemory(h, dereercomp, dllName, strlen(dllName), NULL);
+		if (bStatus == NULL)
+		{
+			ErrorMessageBox("[!] failed to write memory to the process");
+			CHAR Error[MAX_PATH]; // MAX_PATH is used for system paths, it's still big enough
+			wsprintfA(Error, "Error: %lu", GetLastError());
+			ErrorMessageBox(Error);
+			CloseHandle(h);
+			return FALSE;
+		}
 		HANDLE asdc = CreateRemoteThread(h, NULL, NULL, (LPTHREAD_START_ROUTINE)LoadLibAddr, dereercomp, 0, NULL);
+		if (asdc == NULL)
+		{
+			ErrorMessageBox("[!] failed to create remote process");
+			CHAR Error[MAX_PATH]; // MAX_PATH is used for system paths, it's still big enough
+			wsprintfA(Error, "Error: %lu", GetLastError());
+			ErrorMessageBox(Error);
+			CloseHandle(h);
+			return FALSE;
+		}
 		WaitForSingleObject(asdc, INFINITE);
 		VirtualFreeEx(h, dereercomp, strlen(dllName), MEM_RELEASE);
 		CloseHandle(asdc);
 		CloseHandle(h);
-		return true;
+		return TRUE;
 	}
-	return false;
+	return FALSE;
 }
 
 DWORD GetProcID( char * name )
 {
-	if (!EnumProcesses(aProcesses, sizeof(aProcesses), &cbNeeded))
+	HANDLE hProcessSnap;
+	PROCESSENTRY32W pe32;
+
+	// Take a snapshot of all processes in the system.
+	hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+	if (hProcessSnap == INVALID_HANDLE_VALUE)
 	{
+		ErrorMessageBox("CreateToolhelp32Snapshot (of processes)");
 		return 0;
 	}
 
-	// Calculate how many process identifiers were returned.
+	// Set the size of the structure before using it.
+	pe32.dwSize = sizeof(PROCESSENTRY32W);
 
-	cProcesses = cbNeeded / sizeof(DWORD);
-
-	// Print the name and process identifier for each process.
-
-	for (unsigned int i = 0; i < cProcesses; i++)
+	// Retrieve information about the first process,
+	// and exit if unsuccessful
+	if (!Process32First(hProcessSnap, &pe32))
 	{
-		if (aProcesses[i] != 0)
+		CloseHandle(hProcessSnap);          // clean the snapshot object
+		return 0;
+	}
+
+	do
+	{
+		_bstr_t b(pe32.szExeFile);
+		const char* c = b;
+		if (strcmp(name, c) == NULL)
 		{
-			*SzProcessNamech = NULL;
+			return pe32.th32ProcessID;
+		}
+	} while (Process32Next(hProcessSnap, &pe32));
 
-			// Get a handle to the process.
+	CloseHandle(hProcessSnap);
+	return 0;
+}
 
-			HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
-				PROCESS_VM_READ,
-				FALSE, aProcesses[i]);
+BOOL CheckForDLL(DWORD *processid, char *pathofDLL)
+{
+	// Get a handle to the process.
 
-			// Get the process name.
+	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
+		PROCESS_VM_READ,
+		FALSE, *processid);
 
-			if (NULL != hProcess)
+	// Get the process name.
+
+	if (NULL != hProcess)
+	{
+		HMODULE hMod[1024];
+		DWORD cbNeeded;
+		char nameofDLL[MAX_PATH];
+		char currentnameofdll[MAX_PATH];
+		char processname[MAX_PATH];
+
+		GetWindowTextA(hWndProcessName, processname, MAX_PATH);
+		GetFileTitleA(pathofDLL, currentnameofdll, MAX_PATH);
+
+		if (K32EnumProcessModules(hProcess, hMod, sizeof(hMod),
+			&cbNeeded) != NULL)
+		{
+			for (int i = 0; i < (sizeof(hMod) / sizeof(HMODULE)); i++)
 			{
-				hMod = NULL;
-				cbNeeded = NULL;
-
-				if (EnumProcessModules(hProcess, &hMod, sizeof(hMod),
-					&cbNeeded))
+				if (K32GetModuleBaseNameA(hProcess, hMod[i], nameofDLL, MAX_PATH) != NULL)
 				{
-					if (GetModuleBaseNameA(hProcess, hMod, SzProcessNamech,
-						sizeof(szProcessName) / sizeof(TCHAR)))
+					if ((string)nameofDLL != (string)processname)
 					{
-						if ((string)SzProcessNamech == (string)name)
+						if ((string)nameofDLL == (string)currentnameofdll)
 						{
-							return aProcesses[i];
+							return TRUE;
 						}
 					}
 				}
 			}
 		}
 	}
-	return 0;
+
+	// Release the handle to the process.
+
+	CloseHandle(hProcess);
+	return FALSE;
 }
