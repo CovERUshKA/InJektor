@@ -30,3 +30,12 @@
 *.exe
 *.out
 *.app
+*.ipch
+*.db
+*.db-shm
+*.db-wal
+*.opendb
+*.tlog
+*.pdb
+*.log
+InJekтоpNew/.vs/InJekтоpNew/v16/.suo
