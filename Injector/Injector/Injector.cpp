@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "Injector.h"
+#include <string>
 
 #define IDC_INJECT_BUTTON 275
 #define IDC_SELECT_PROCESS_BUTTON 276
@@ -23,7 +24,7 @@ WCHAR szTitle[MAX_LOADSTRING];                  // Текст строки за�
 WCHAR szWindowClass[MAX_LOADSTRING];            // имя класса главного окна
 HWND hWndProcessName, hWndProcessList, hWndDLLName, hWndSelectDLLButton;
 WNDCLASSEXW wc = { 0 };
-char szFile[100];
+wchar_t szFile[MAX_PATH];
 OPENFILENAME ofn;
 FILE* fp;
 
@@ -37,7 +38,7 @@ void				SelectDll(HWND hWnd);
 void				SelectProcess(HWND hWnd);
 BOOL				Inject(DWORD dwProcessID, const char * dllName);
 DWORD               GetProcessIDByName(const wchar_t* name);
-BOOL				CheckForDLL(DWORD *processid, char *pathofDLL);
+BOOL				CheckForDLL(DWORD processid, char *pathofDLL);
 
 int APIENTRY wWinMain(_In_ HINSTANCE hInstance,
 	_In_opt_ HINSTANCE hPrevInstance,
@@ -182,7 +183,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			char dllpath[MAX_PATH];
 			ZeroMemory(dllpath, sizeof(dllpath));
 
-			GetWindowTextW(hWndProcessName, wchProcessName, sizeof(wchProcessName));
+			if (!GetWindowTextW(hWndProcessName, wchProcessName, MAX_PATH))
+			{
+				ErrorMessageBox("Unable to get window text");
+				return DefWindowProcW(hWnd, message, wParam, lParam);
+			}
 
 			DWORD dwProcessID = GetProcessIDByName(wchProcessName);
 			if (!dwProcessID)
@@ -190,22 +195,23 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				ErrorMessageBox("Process is not finded");
 				return DefWindowProcW(hWnd, message, wParam, lParam);
 			}
-			GetWindowTextA(hWndDLLName, dllpath, MAX_PATH);
 
-			if (CheckForDLL(&dwProcessID, dllpath))
+			if (!GetWindowTextA(hWndDLLName, dllpath, MAX_PATH))
+			{
+				ErrorMessageBox("Unable to get window text");
+				return DefWindowProcW(hWnd, message, wParam, lParam);
+			}
+
+			if (CheckForDLL(dwProcessID, dllpath))
 			{
 				ErrorMessageBox("DLL already in process");
 				return DefWindowProc(hWnd, message, wParam, lParam);
 			}
 
-			if (!Inject(dwProcessID, (const char *)dllpath))
-			{
-				ErrorMessageBox("Failed to inject");
-			}
+			if (!Inject(dwProcessID, dllpath))
+				ErrorMessageBox("Failed to inject")
 			else
-			{
 				CustomMessageBox("Status", "Successful inject");
-			}
 		}
 		break;
 		case IDM_ABOUT:
@@ -215,7 +221,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			DestroyWindow(hWnd);
 			break;
 		default:
-			return DefWindowProcA(hWnd, message, wParam, lParam);
+			return DefWindowProc(hWnd, message, wParam, lParam);
 		}
 	}
 	break;
@@ -296,6 +302,9 @@ void RegisterDialogClass(HWND hWnd)
 
 void SelectProcess(HWND hWnd)
 {
+	HANDLE hProcessSnap = INVALID_HANDLE_VALUE;
+	PROCESSENTRY32 pe32;
+
 	AllocConsole();
 	ZeroMemory(&fp, sizeof(FILE));
 	SetConsoleCP(1251);
@@ -306,16 +315,12 @@ void SelectProcess(HWND hWnd)
 	cout.clear();
 	setlocale(LC_ALL, "Russian");
 
-	HANDLE hProcessSnap;
-	PROCESSENTRY32 pe32;
-
 	// Take a snapshot of all processes in the system.
 	hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 	if (hProcessSnap == INVALID_HANDLE_VALUE)
 	{
 		cout << "CreateToolhelp32Snapshot (of processes)";
-		FreeConsole();
-		return;
+		goto end;
 	}
 
 	// Set the size of the structure before using it.
@@ -326,24 +331,25 @@ void SelectProcess(HWND hWnd)
 	if (!Process32First(hProcessSnap, &pe32))
 	{
 		cout << "Process32First"; // show cause of failure
-		CloseHandle(hProcessSnap);          // clean the snapshot object
-		FreeConsole();
-		return;
+		goto end;
 	}
 
 	do
 	{
-		_tprintf(L"\n%s", pe32.szExeFile);
-
+		wcout << pe32.szExeFile << endl;
 	} while (Process32Next(hProcessSnap, &pe32));
-
-	CloseHandle(hProcessSnap);
+end:
+	if (hProcessSnap != INVALID_HANDLE_VALUE) CloseHandle(hProcessSnap);
 	FreeConsole();
+
+	return;
 }
 
 void SelectDll(HWND hWnd)
 {
 	ZeroMemory(&ofn, sizeof(ofn));
+	ZeroMemory(szFile, sizeof(szFile));
+
 	ofn.lStructSize = sizeof(ofn);
 	ofn.hwndOwner = hWnd;
 	ofn.lpstrFile = (LPWSTR)szFile;
@@ -355,12 +361,16 @@ void SelectDll(HWND hWnd)
 	ofn.nMaxFileTitle = 0;
 	ofn.lpstrInitialDir = NULL;
 	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR;
-	GetOpenFileNameW(&ofn);
+
+	if (!GetOpenFileNameW(&ofn))
+		return;
 
 	if (ofn.lpstrFile)
 		SetWindowTextW(hWndDLLName, ofn.lpstrFile);
 	else
 		ErrorMessageBox("DLL isn't choosen");
+
+	return;
 }
 
 BOOL Inject(DWORD dwProcessID, const char *chDLLName)
@@ -380,14 +390,14 @@ BOOL Inject(DWORD dwProcessID, const char *chDLLName)
 	);
 	if (!h)
 	{
-		ErrorMessageBox("Failed to open process process");
+		ErrorMessageBox("Failed to open process");
 		goto end;
 	}
 
 	lpLoadLibrary = (LPVOID)GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA");
 	if (lpLoadLibrary == NULL)
 	{
-		ErrorMessageBox("Failed to create remote process");
+		ErrorMessageBox("Failed to get address of LoadLibraryA");
 		goto end;
 	}
 
@@ -415,13 +425,8 @@ BOOL Inject(DWORD dwProcessID, const char *chDLLName)
 	WaitForSingleObject(hThread, INFINITE);
 
 	bRet = TRUE;
-end:
-	if (!bRet)
-	{
-		wsprintfA(chError, "Error: %lu", GetLastError());
-		ErrorMessageBox(chError);
-	}
 
+end:
 	if (h
 		&& lpAlloc)
 	{
@@ -458,13 +463,13 @@ DWORD GetProcessIDByName(const wchar_t* name)
 	return NULL;
 }
 
-BOOL CheckForDLL(DWORD *processid, char *pathofDLL)
+BOOL CheckForDLL(DWORD processid, char *pathofDLL)
 {
 	// Get a handle to the process.
 
 	HANDLE hProcess = OpenProcess(PROCESS_QUERY_INFORMATION |
 		PROCESS_VM_READ,
-		FALSE, *processid);
+		FALSE, processid);
 
 	// Get the process name.
 
