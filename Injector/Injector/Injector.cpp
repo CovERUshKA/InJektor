@@ -427,8 +427,7 @@ BOOL Inject(DWORD dwProcessID, const char *chDLLName)
 	bRet = TRUE;
 
 end:
-	if (h
-		&& lpAlloc)
+	if (h && lpAlloc)
 	{
 		VirtualFreeEx(h, lpAlloc, strlen(chDLLName), MEM_RELEASE);
 	}
