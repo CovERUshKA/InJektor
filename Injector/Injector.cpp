@@ -506,7 +506,7 @@ BOOL CheckForDLL(DWORD dwProcessID, char *chFullPath)
             throw exception("Unable to get file title from full dll path");
 
         // Get all module handles from the process to the buffer
-        if (~K32EnumProcessModules(hProcess, hMod, sizeof(hMod),
+        if (!K32EnumProcessModules(hProcess, hMod, sizeof(hMod),
             &cbNeeded) != NULL)
             throw exception("Unable to enum target process modules");
 
