@@ -1,6 +1,6 @@
 ﻿//{{NO_DEPENDENCIES}}
-// Включаемый файл, созданный в Microsoft Visual C++.
-// Используется InJekтоpNew.rc
+// Include file, created in Microsoft Visual C++.
+// Used in Injector.rc
 //
 #define IDC_MYICON                      2
 #define IDD_INJEKPNEW_DIALOG            102

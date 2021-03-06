@@ -28,22 +28,9 @@
 
 # Executables
 *.exe
-*.out
-*.app
-*.ipch
-*.db
-*.db-shm
-*.db-wal
-*.opendb
-*.tlog
-*.pdb
-*.log
-InJekтоpNew/.vs/InJekтоpNew/v16/.suo
-Injector/.vs/Injector/v16/.suo
-Injector/.vs/InJekтоpNew/v16/.suo
-*.ilk
-*.recipe
-*.res
-*.idb
-*.iobj
-*.ipdb
+
+# Folders
+.vs
+x64
+Debug
+Release
