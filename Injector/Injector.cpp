@@ -26,12 +26,12 @@ HWND hWndProcessName,                           // TextEdit Process name window
 ATOM                MyRegisterClass(HINSTANCE hInstance);
 BOOL                InitInstance(HINSTANCE, int);
 LRESULT CALLBACK    WndProc(HWND, UINT, WPARAM, LPARAM);
-void				InitializeClientArea(HWND);
-void				SelectDll(HWND hWnd);
-void				SelectProcess(HWND hWnd);
-BOOL				Inject(DWORD dwProcessID, const char * dllName);
+void                InitializeClientArea(HWND);
+void                SelectDll(HWND hWnd);
+void                SelectProcess(HWND hWnd);
+BOOL                Inject(DWORD dwProcessID, const char * dllName);
 DWORD               GetProcessIDByName(const wchar_t* name);
-BOOL				CheckForDLL(DWORD processid, char *pathofDLL);
+BOOL                CheckForDLL(DWORD processid, char *pathofDLL);
 
 //
 //  Function: wWinMain(HINSTANCE, HINSTANCE, LPWSTR, int)
